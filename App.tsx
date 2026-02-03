@@ -29,17 +29,9 @@ export default function App() {
   });
 
   useEffect(() => {
-    try {
-      const savedAuth = localStorage.getItem('gym_auth');
-      if (savedAuth) {
-        const parsed = JSON.parse(savedAuth);
-        if (parsed && parsed.isAuthenticated) {
-          setAuthState(parsed);
-        }
-      }
-    } catch (e) {
-      console.error("Failed to load auth state", e);
-      localStorage.removeItem('gym_auth');
+    const savedAuth = localStorage.getItem('gym_auth');
+    if (savedAuth) {
+      setAuthState(JSON.parse(savedAuth));
     }
   }, []);
 
@@ -75,7 +67,7 @@ export default function App() {
 
   return (
     <AuthContext.Provider value={{ authState, login, logout }}>
-      <div className="min-h-screen bg-gym-dark text-gym-text selection:bg-gym-accent selection:text-white">
+      <div className="min-h-screen bg-gym-dark text-gym-text">
         {authState.isAuthenticated && (
            <nav className="border-b border-slate-800 bg-gym-dark/95 backdrop-blur sticky top-0 z-40">
              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -95,8 +87,7 @@ export default function App() {
                    </div>
                    <button 
                     onClick={logout}
-                    className="p-2 w-10 h-10 flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-800 rounded-full transition-colors"
-                    title="Logout"
+                    className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-full transition-colors"
                    >
                      <i className="fas fa-sign-out-alt"></i>
                    </button>
@@ -105,7 +96,7 @@ export default function App() {
              </div>
            </nav>
         )}
-        <main className={`max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 ${!authState.isAuthenticated ? 'flex items-center justify-center min-h-screen' : ''}`}>
+        <main className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
           {CurrentView}
         </main>
       </div>
