@@ -28,19 +28,10 @@ export default function App() {
     role: null,
   });
 
-  // Rehydrate auth state on mount
   useEffect(() => {
-    try {
-      const savedAuth = localStorage.getItem('gym_auth');
-      if (savedAuth) {
-        const parsed = JSON.parse(savedAuth);
-        if (parsed && typeof parsed === 'object' && parsed.isAuthenticated) {
-          setAuthState(parsed);
-        }
-      }
-    } catch (e) {
-      console.error("Auth hydration error:", e);
-      localStorage.removeItem('gym_auth');
+    const savedAuth = localStorage.getItem('gym_auth');
+    if (savedAuth) {
+      setAuthState(JSON.parse(savedAuth));
     }
   }, []);
 
@@ -55,7 +46,6 @@ export default function App() {
     localStorage.removeItem('gym_auth');
   };
 
-  // View Router
   let CurrentView;
   if (!authState.isAuthenticated) {
     CurrentView = <Login onLogin={login} />;
@@ -77,32 +67,27 @@ export default function App() {
 
   return (
     <AuthContext.Provider value={{ authState, login, logout }}>
-      <div className="min-h-screen bg-gym-dark text-gym-text flex flex-col">
+      <div className="min-h-screen bg-gym-dark text-gym-text">
         {authState.isAuthenticated && (
-           <nav className="border-b border-slate-800 bg-gym-dark/95 backdrop-blur-md sticky top-0 z-50">
+           <nav className="border-b border-slate-800 bg-gym-dark/95 backdrop-blur sticky top-0 z-40">
              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                <div className="flex justify-between h-16 items-center">
                  <div className="flex items-center gap-3">
-                   <div className="w-10 h-10 rounded-xl bg-gym-accent flex items-center justify-center shadow-lg shadow-gym-accent/20">
-                     <i className="fas fa-dumbbell text-white text-lg"></i>
+                   <div className="w-8 h-8 rounded bg-gym-accent flex items-center justify-center">
+                     <i className="fas fa-dumbbell text-white"></i>
                    </div>
-                   <span className="font-bold text-xl tracking-tight text-white hidden sm:block">
-                     GymPro<span className="text-gym-accent">Central</span>
-                   </span>
+                   <span className="font-bold text-xl tracking-tight text-white">GymPro<span className="text-gym-accent">Central</span></span>
                  </div>
                  <div className="flex items-center gap-4">
-                   <div className="text-right hidden sm:block border-r border-slate-800 pr-4 mr-1">
-                     <div className="text-sm font-bold text-white">
+                   <div className="text-right hidden sm:block">
+                     <div className="text-sm font-medium text-white">
                         {authState.role === UserRole.SUPER_ADMIN ? 'Platform Admin' : (authState.user as any)?.name}
                      </div>
-                     <div className="text-[10px] text-slate-500 uppercase tracking-widest">
-                       {authState.role?.replace('_', ' ')}
-                     </div>
+                     <div className="text-xs text-slate-400 capitalize">{authState.role?.toLowerCase().replace('_', ' ')}</div>
                    </div>
                    <button 
                     onClick={logout}
-                    className="p-2 w-10 h-10 flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-800 rounded-full transition-all"
-                    title="Logout"
+                    className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-full transition-colors"
                    >
                      <i className="fas fa-sign-out-alt"></i>
                    </button>
@@ -111,10 +96,8 @@ export default function App() {
              </div>
            </nav>
         )}
-        <main className={`flex-grow w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 ${!authState.isAuthenticated ? 'flex items-center justify-center' : ''}`}>
-          <div className="w-full animate-fade-in">
-            {CurrentView}
-          </div>
+        <main className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+          {CurrentView}
         </main>
       </div>
     </AuthContext.Provider>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Member, Gym, TransactionCategory, PaymentRecord, SupplementBill } from '../types';
-import { getMembers, addMember, getMemberStatus, updateMember, getTransactions, recordTransaction, updateGym } from '../services/storage';
+import { getMembers, addMember, getMemberStatus, updateMember, getTransactions, recordTransaction, updateGym, deleteMember } from '../services/storage';
 import { Button, Input, Card, Modal, Select, Badge } from '../components/UI';
 import { useAuth } from '../App';
 import { generateWhatsAppMessage } from '../services/geminiService';
@@ -71,6 +71,21 @@ const ManagerDashboard: React.FC = () => {
       return matchesSearch && matchesStatus && matchesDuration;
     });
   }, [members, searchTerm, filterStatus, filterDuration]);
+
+  const handleDeleteMember = async (id: string, name: string) => {
+    if (confirm(`Are you sure you want to delete ${name}? This action cannot be undone.`)) {
+      setProcessing(true);
+      try {
+        await deleteMember(id);
+        await refreshData();
+        alert('Member deleted successfully');
+      } catch (err) {
+        alert('Failed to delete member');
+      } finally {
+        setProcessing(processing => false);
+      }
+    }
+  };
 
   const handleUpdateGymTerms = async () => {
     setProcessing(true);
@@ -194,7 +209,7 @@ const ManagerDashboard: React.FC = () => {
       setSelectedMember(updated);
       setManualExtendDays('');
       setManualExtendAmount('');
-      alert(`Plan Extended by ${days} days. Payment of ₹${amount} recorded.`);
+      alert(`Plan Extended. Payment of ₹${amount} recorded.`);
     } catch (err) {
       alert("Error extending plan");
     } finally {
@@ -228,7 +243,7 @@ const ManagerDashboard: React.FC = () => {
           method: 'OFFLINE',
           recordedBy: 'Manager',
           category: TransactionCategory.SUPPLEMENT,
-          details: `Supplement: ${suppForm.itemName} x ${suppForm.qty} for ${selectedMember.name}`
+          details: `Supplement: ${suppForm.itemName} for ${selectedMember.name}`
       });
 
       await updateMember(updated);
@@ -307,7 +322,7 @@ const ManagerDashboard: React.FC = () => {
                   await refreshData();
                   setSelectedMember(updated);
                 } catch (err) {
-                  alert("Failed to upload photo to cloud");
+                  alert("Upload failed");
                 }
             }
         };
@@ -316,78 +331,101 @@ const ManagerDashboard: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-white">{gym?.name} Manager</h1>
-          <p className="text-slate-400">Gym ID: {gym?.id} | Branch: {gym?.city}</p>
+    <div className="space-y-8 animate-fade-in">
+      {/* Header Section */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+        <div className="flex items-center gap-5">
+           <div className="w-14 h-14 bg-gym-accent rounded-2xl flex items-center justify-center text-white text-2xl shadow-xl shadow-gym-accent/30">
+              <i className="fas fa-chart-line"></i>
+           </div>
+           <div>
+              <h1 className="text-3xl font-extrabold text-white tracking-tight">{gym?.name}</h1>
+              <p className="text-slate-500 font-medium">Branch Dashboard • {gym?.city}</p>
+           </div>
         </div>
-        <div className="flex gap-2">
-           <Button variant={activeTab === 'MEMBERS' ? 'primary' : 'outline'} onClick={() => setActiveTab('MEMBERS')}>Members</Button>
-           <Button variant={activeTab === 'FINANCIALS' ? 'primary' : 'outline'} onClick={() => setActiveTab('FINANCIALS')}>Financials</Button>
-           <Button variant={activeTab === 'SETTINGS' ? 'primary' : 'outline'} onClick={() => setActiveTab('SETTINGS')}>Settings</Button>
+        <div className="flex gap-2 bg-slate-900/50 p-1.5 rounded-2xl glass border-slate-800">
+           {(['MEMBERS', 'FINANCIALS', 'SETTINGS'] as const).map(tab => (
+             <button 
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`px-5 py-2 rounded-xl text-xs font-bold transition-all ${activeTab === tab ? 'bg-gym-accent text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}
+             >
+               {tab}
+             </button>
+           ))}
         </div>
       </div>
 
       {loading && (
-        <div className="text-center py-20">
-          <i className="fas fa-circle-notch fa-spin text-4xl text-gym-accent mb-4"></i>
-          <p className="text-slate-400">Syncing with cloud...</p>
+        <div className="text-center py-32">
+          <div className="inline-block w-12 h-12 border-4 border-gym-accent border-t-transparent rounded-full animate-spin mb-4"></div>
+          <p className="text-slate-500 font-medium tracking-wide">Synchronizing secure data...</p>
         </div>
       )}
 
       {!loading && activeTab === 'SETTINGS' && (
-        <Card title="Gym Configuration">
-           <div className="space-y-4">
+        <Card title="Gym Policy Configuration" icon="fa-cog" className="max-w-2xl mx-auto">
+           <div className="space-y-6">
               <div>
-                <label className="block text-sm font-medium text-slate-400 mb-1">Terms and Conditions</label>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Public Terms & Conditions</label>
                 <textarea 
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-gym-accent transition-all min-h-[200px]"
-                  placeholder="Enter the terms and conditions for your gym members..."
+                  className="w-full bg-slate-900/50 border border-slate-800 rounded-2xl px-5 py-4 text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-gym-accent/50 focus:border-gym-accent transition-all min-h-[250px] text-sm leading-relaxed"
+                  placeholder="Enter your gym policies, rules, and liability waivers here..."
                   value={gymTerms}
                   onChange={(e) => setGymTerms(e.target.value)}
                   disabled={processing}
                 />
-                <p className="text-[10px] text-slate-500 mt-1">These will be visible to all members in their dashboard.</p>
+                <div className="mt-3 p-3 bg-blue-500/5 rounded-xl border border-blue-500/10 flex items-start gap-3">
+                   <i className="fas fa-info-circle text-blue-400 mt-0.5"></i>
+                   <p className="text-[11px] text-blue-400/80 leading-snug">These terms will be prominently displayed on every member's personal dashboard for compliance and clarity.</p>
+                </div>
               </div>
-              <Button onClick={handleUpdateGymTerms} isLoading={processing}>Save Settings</Button>
+              <Button onClick={handleUpdateGymTerms} isLoading={processing} className="w-full">Update Policies</Button>
            </div>
         </Card>
       )}
 
       {!loading && activeTab === 'MEMBERS' && (
         <>
-          <div className="flex flex-col gap-4 bg-slate-800/40 p-4 rounded-xl border border-slate-700/50">
-             <div className="flex flex-col md:flex-row gap-4 items-center">
-                <Input placeholder="Search by ID or Name..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="max-w-xs" />
-                <div className="flex flex-wrap gap-2">
+          <div className="glass p-5 rounded-3xl space-y-5 border-slate-800/50">
+             <div className="flex flex-col lg:flex-row gap-4 items-center">
+                <Input 
+                  placeholder="Search members..." 
+                  value={searchTerm} 
+                  onChange={e => setSearchTerm(e.target.value)} 
+                  className="flex-1" 
+                  icon="fa-search"
+                />
+                <div className="flex flex-wrap gap-2 w-full lg:w-auto">
                    {(['ALL', 'ACTIVE', 'EXPIRED', 'EXPIRING_SOON'] as const).map(s => (
                      <button 
                        key={s} 
                        onClick={() => setFilterStatus(s)}
-                       className={`px-3 py-1 text-xs rounded-md border border-slate-700 transition-all ${filterStatus === s ? 'bg-gym-accent text-white border-gym-accent' : 'bg-slate-900 text-slate-400 hover:text-white'}`}
+                       className={`px-4 py-2 text-[10px] font-bold uppercase tracking-wider rounded-xl transition-all border ${filterStatus === s ? 'bg-gym-accent border-gym-accent text-white shadow-lg shadow-gym-accent/20' : 'bg-slate-900/50 border-slate-800 text-slate-500 hover:text-slate-300'}`}
                      >
                        {s.replace('_', ' ')}
                      </button>
                    ))}
                 </div>
-                <Button className="md:ml-auto" onClick={() => setIsAddModalOpen(true)}><i className="fas fa-plus mr-2"></i> Add Member</Button>
+                <Button className="w-full lg:w-auto px-6" onClick={() => setIsAddModalOpen(true)}>
+                   <i className="fas fa-plus-circle mr-2"></i> Register Member
+                </Button>
              </div>
              
-             <div className="flex flex-wrap gap-2 items-center text-xs">
-                <span className="text-slate-500 font-bold uppercase">Plan Duration:</span>
+             <div className="flex flex-wrap gap-2 items-center text-[10px] font-bold text-slate-600 uppercase tracking-widest pl-1 border-t border-slate-800 pt-4">
+                <span className="mr-2">Plan Type:</span>
                 {[
-                  { label: 'All Plans', value: 'ALL' },
-                  { label: '1 Month', value: 30 },
-                  { label: '2 Months', value: 60 },
-                  { label: '3 Months', value: 90 },
-                  { label: '6 Months', value: 180 },
-                  { label: '12 Months', value: 365 },
+                  { label: 'All', value: 'ALL' },
+                  { label: '1M', value: 30 },
+                  { label: '2M', value: 60 },
+                  { label: '3M', value: 90 },
+                  { label: '6M', value: 180 },
+                  { label: '12M', value: 365 },
                 ].map(p => (
                    <button
                     key={p.label}
                     onClick={() => setFilterDuration(p.value as any)}
-                    className={`px-3 py-1 rounded-md border border-slate-700 transition-all ${filterDuration === p.value ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-900 text-slate-400 hover:text-white'}`}
+                    className={`px-3 py-1.5 rounded-lg border transition-all ${filterDuration === p.value ? 'bg-blue-600/10 border-blue-600/30 text-blue-400' : 'bg-transparent border-slate-800 hover:border-slate-700'}`}
                    >
                      {p.label}
                    </button>
@@ -396,122 +434,174 @@ const ManagerDashboard: React.FC = () => {
           </div>
 
           {filteredMembers.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
               {filteredMembers.map(member => (
-                <Card key={member.id} className="relative group hover:border-gym-accent/50 transition-all">
-                  <div className="absolute top-2 right-2 flex flex-col items-end gap-2">
-                    <Badge status={getMemberStatus(member.expiryDate)} />
-                    <button 
-                        onClick={() => handleWhatsAppClick(member)}
-                        className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${isSendingWhatsApp === member.id ? 'bg-slate-700 animate-pulse' : 'bg-green-500 hover:bg-green-600 text-white shadow-lg shadow-green-500/20'}`}
-                        title="Send WhatsApp Message"
-                    >
-                        {isSendingWhatsApp === member.id ? <i className="fas fa-spinner fa-spin text-xs"></i> : <i className="fab fa-whatsapp text-lg"></i>}
-                    </button>
-                  </div>
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="w-12 h-12 rounded-full bg-slate-700 overflow-hidden ring-2 ring-slate-800">
-                      {member.profilePhoto ? <img src={member.profilePhoto} className="w-full h-full object-cover" /> : <div className="flex items-center justify-center h-full text-xl text-slate-500 font-bold">{member.name.charAt(0)}</div>}
+                <div key={member.id} className="group relative">
+                  <div className="absolute -inset-0.5 bg-gradient-to-r from-gym-accent to-blue-500 rounded-[2.5rem] blur opacity-0 group-hover:opacity-10 transition duration-500"></div>
+                  <Card className="relative glass p-5 rounded-[2rem] h-full flex flex-col glass-hover">
+                    <div className="flex justify-between items-start mb-6">
+                      <div className="w-16 h-16 rounded-2xl bg-slate-800 border border-slate-700 overflow-hidden shadow-lg group-hover:scale-105 transition-transform">
+                        {member.profilePhoto ? (
+                          <img src={member.profilePhoto} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="flex items-center justify-center h-full text-2xl text-slate-600 font-bold bg-gradient-to-br from-slate-800 to-slate-900">
+                            {member.name.charAt(0)}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex flex-col items-end gap-2">
+                        <Badge status={getMemberStatus(member.expiryDate)} />
+                        <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button 
+                                onClick={() => handleWhatsAppClick(member)}
+                                className="w-8 h-8 rounded-full bg-green-500/10 text-green-500 hover:bg-green-500 hover:text-white flex items-center justify-center transition-all"
+                            >
+                                <i className="fab fa-whatsapp text-sm"></i>
+                            </button>
+                            <button 
+                                onClick={() => handleDeleteMember(member.id, member.name)}
+                                className="w-8 h-8 rounded-full bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white flex items-center justify-center transition-all"
+                            >
+                                <i className="fas fa-trash-alt text-xs"></i>
+                            </button>
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="font-bold text-white truncate w-24">{member.name}</h3>
-                      <p className="text-xs text-slate-500">ID: {member.id}</p>
+
+                    <div className="mb-6 flex-grow">
+                      <h3 className="font-extrabold text-white text-lg tracking-tight truncate mb-0.5">{member.name}</h3>
+                      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-4">ID: {member.id}</p>
+                      
+                      <div className="grid grid-cols-2 gap-3">
+                         <div className="bg-white/5 rounded-xl p-2.5 border border-white/5">
+                            <span className="block text-[8px] text-slate-500 uppercase font-bold tracking-widest mb-0.5">Plan</span>
+                            <span className="block text-xs font-bold text-slate-300">{member.planDurationDays} Days</span>
+                         </div>
+                         <div className="bg-white/5 rounded-xl p-2.5 border border-white/5">
+                            <span className="block text-[8px] text-slate-500 uppercase font-bold tracking-widest mb-0.5">Expires</span>
+                            <span className="block text-xs font-bold text-gym-accent">{new Date(member.expiryDate).toLocaleDateString()}</span>
+                         </div>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex justify-between text-[10px] text-slate-500 mb-4 border-t border-slate-700/50 pt-2">
-                     <span>{member.planDurationDays} Day Plan</span>
-                     <span>Exp: {new Date(member.expiryDate).toLocaleDateString()}</span>
-                  </div>
-                  <Button size="sm" variant="outline" className="w-full" onClick={() => { 
-                      setSelectedMember(member); 
-                      setFormData({
-                          id: member.id, name: member.name, phone: member.phone, age: String(member.age),
-                          weight: String(member.weight), height: String(member.height), address: member.address,
-                          password: member.password, planDurationDays: member.planDurationDays, amountPaid: '', joinDate: member.joinDate.split('T')[0], profilePhoto: member.profilePhoto || ''
-                      });
-                      setIsEditModalOpen(true); 
-                  }}>Manage Member</Button>
-                </Card>
+
+                    <Button variant="secondary" size="sm" className="w-full rounded-xl py-2.5" onClick={() => { 
+                        setSelectedMember(member); 
+                        setFormData({
+                            id: member.id, name: member.name, phone: member.phone, age: String(member.age),
+                            weight: String(member.weight), height: String(member.height), address: member.address,
+                            password: member.password, planDurationDays: member.planDurationDays, amountPaid: '', joinDate: member.joinDate.split('T')[0], profilePhoto: member.profilePhoto || ''
+                        });
+                        setIsEditModalOpen(true); 
+                    }}>Manage Account</Button>
+                  </Card>
+                </div>
               ))}
             </div>
           ) : (
-            <div className="text-center py-20 bg-slate-800/20 rounded-xl border border-dashed border-slate-700">
-               <i className="fas fa-users text-4xl text-slate-700 mb-4"></i>
-               <p className="text-slate-500">No members match your current filters.</p>
-               <Button variant="outline" size="sm" className="mt-4" onClick={() => {setFilterStatus('ALL'); setFilterDuration('ALL'); setSearchTerm('');}}>Clear All Filters</Button>
+            <div className="text-center py-32 glass border-dashed border-slate-800 rounded-[2.5rem]">
+               <div className="w-20 h-20 bg-slate-900 rounded-full flex items-center justify-center mx-auto mb-6 text-slate-700">
+                  <i className="fas fa-users-slash text-3xl"></i>
+               </div>
+               <h3 className="text-xl font-bold text-white mb-2">No Members Found</h3>
+               <p className="text-slate-500 max-w-xs mx-auto mb-8">Try adjusting your filters or search terms to find what you're looking for.</p>
+               <Button variant="outline" size="sm" onClick={() => {setFilterStatus('ALL'); setFilterDuration('ALL'); setSearchTerm('');}}>
+                  Reset All Filters
+               </Button>
             </div>
           )}
         </>
       )}
 
       {!loading && activeTab === 'FINANCIALS' && (
-        <div className="space-y-6">
-           <Card title="Financial Overview">
-              <div className="flex flex-wrap gap-4 mb-6 items-end">
+        <div className="space-y-8 max-w-6xl mx-auto">
+           <Card title="Revenue Distribution" icon="fa-wallet">
+              <div className="flex flex-wrap gap-4 mb-10 items-end">
                  <Select 
-                    label="Range" 
-                    className="w-40"
+                    label="Time Range" 
+                    className="w-48"
                     options={[
-                        { label: 'Today', value: 'TODAY' },
-                        { label: 'This Month', value: 'MONTH' },
-                        { label: 'Specific Date', value: 'SPECIFIC' },
-                        { label: 'Date Range', value: 'RANGE' },
+                        { label: 'Today Only', value: 'TODAY' },
+                        { label: 'Full Month', value: 'MONTH' },
+                        { label: 'Specific Day', value: 'SPECIFIC' },
+                        { label: 'Range Filter', value: 'RANGE' },
                     ]} 
                     value={finRange}
                     onChange={e => setFinRange(e.target.value as any)}
                  />
                  {(finRange === 'SPECIFIC' || finRange === 'RANGE') && (
-                    <Input label="Start" type="date" value={finStartDate} onChange={e => setFinStartDate(e.target.value)} />
+                    <Input label="Start Date" type="date" value={finStartDate} onChange={e => setFinStartDate(e.target.value)} />
                  )}
                  {finRange === 'RANGE' && (
-                    <Input label="End" type="date" value={finEndDate} onChange={e => setFinEndDate(e.target.value)} />
+                    <Input label="End Date" type="date" value={finEndDate} onChange={e => setFinEndDate(e.target.value)} />
                  )}
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                 <div className="bg-slate-900 p-4 rounded-xl border border-slate-800">
-                    <div className="text-sm text-slate-500 uppercase font-bold tracking-wider">Total Revenue</div>
-                    <div className="text-3xl font-bold text-gym-accent mt-1">₹{finStats.total}</div>
-                 </div>
-                 <div className="bg-slate-900 p-4 rounded-xl border border-slate-800">
-                    <div className="text-sm text-slate-500 uppercase font-bold tracking-wider">Memberships</div>
-                    <div className="text-2xl font-bold text-blue-400 mt-1">₹{finStats.membership}</div>
-                    <div className="w-full bg-slate-800 h-1.5 mt-3 rounded-full overflow-hidden">
-                       <div className="bg-blue-400 h-full" style={{ width: `${(finStats.membership/finStats.total)*100 || 0}%` }}></div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                 <div className="glass p-6 rounded-[2rem] border-slate-800 flex flex-col justify-center">
+                    <div className="text-[10px] text-slate-500 uppercase font-black tracking-[0.2em] mb-3">Net Revenue</div>
+                    <div className="text-5xl font-black text-white leading-none">₹{finStats.total.toLocaleString()}</div>
+                    <div className="mt-4 flex items-center gap-2 text-gym-accent font-bold text-sm">
+                       <i className="fas fa-arrow-trend-up"></i>
+                       Cloud Sync Active
                     </div>
                  </div>
-                 <div className="bg-slate-900 p-4 rounded-xl border border-slate-800">
-                    <div className="text-sm text-slate-500 uppercase font-bold tracking-wider">Supplements</div>
-                    <div className="text-2xl font-bold text-orange-400 mt-1">₹{finStats.supplements}</div>
-                    <div className="w-full bg-slate-800 h-1.5 mt-3 rounded-full overflow-hidden">
-                       <div className="bg-orange-400 h-full" style={{ width: `${(finStats.supplements/finStats.total)*100 || 0}%` }}></div>
+                 
+                 <div className="space-y-6 md:col-span-2">
+                    <div className="glass p-6 rounded-[2rem] border-slate-800">
+                       <div className="flex justify-between items-center mb-4">
+                          <div className="flex items-center gap-3">
+                             <div className="w-8 h-8 rounded-lg bg-blue-500/20 text-blue-400 flex items-center justify-center">
+                                <i className="fas fa-user-check text-sm"></i>
+                             </div>
+                             <span className="text-sm font-bold text-slate-300">Membership Collections</span>
+                          </div>
+                          <span className="text-xl font-black text-white">₹{finStats.membership.toLocaleString()}</span>
+                       </div>
+                       <div className="w-full bg-slate-900 h-2.5 rounded-full overflow-hidden">
+                          <div className="bg-gradient-to-r from-blue-600 to-blue-400 h-full rounded-full transition-all duration-1000" style={{ width: `${(finStats.membership/finStats.total)*100 || 0}%` }}></div>
+                       </div>
+                    </div>
+
+                    <div className="glass p-6 rounded-[2rem] border-slate-800">
+                       <div className="flex justify-between items-center mb-4">
+                          <div className="flex items-center gap-3">
+                             <div className="w-8 h-8 rounded-lg bg-orange-500/20 text-orange-400 flex items-center justify-center">
+                                <i className="fas fa-capsules text-sm"></i>
+                             </div>
+                             <span className="text-sm font-bold text-slate-300">Supplement Sales</span>
+                          </div>
+                          <span className="text-xl font-black text-white">₹{finStats.supplements.toLocaleString()}</span>
+                       </div>
+                       <div className="w-full bg-slate-900 h-2.5 rounded-full overflow-hidden">
+                          <div className="bg-gradient-to-r from-orange-600 to-orange-400 h-full rounded-full transition-all duration-1000" style={{ width: `${(finStats.supplements/finStats.total)*100 || 0}%` }}></div>
+                       </div>
                     </div>
                  </div>
               </div>
            </Card>
 
-           <Card title="Transaction History">
+           <Card title="Transactional Registry" icon="fa-list-ul">
               <div className="overflow-x-auto">
                 <table className="w-full text-left">
                   <thead>
-                    <tr className="text-xs text-slate-500 uppercase border-b border-slate-800">
-                      <th className="pb-3 px-2">Date</th>
-                      <th className="pb-3 px-2">Details</th>
-                      <th className="pb-3 px-2">Category</th>
-                      <th className="pb-3 px-2 text-right">Amount</th>
+                    <tr className="text-[10px] text-slate-500 uppercase border-b border-slate-800 font-black tracking-widest">
+                      <th className="pb-4 px-4">Timestamp</th>
+                      <th className="pb-4 px-4">Transaction Details</th>
+                      <th className="pb-4 px-4">Type</th>
+                      <th className="pb-4 px-4 text-right">Value</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-800">
+                  <tbody className="divide-y divide-slate-800/50">
                     {finStats.filtered.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map(t => (
-                      <tr key={t.id} className="text-sm hover:bg-slate-800/30 transition-colors">
-                        <td className="py-3 px-2 text-slate-400">{new Date(t.date).toLocaleDateString()}</td>
-                        <td className="py-3 px-2 text-white">{t.details}</td>
-                        <td className="py-3 px-2">
-                            <span className={`px-2 py-0.5 rounded text-[10px] ${t.category === TransactionCategory.MEMBERSHIP ? 'bg-blue-500/10 text-blue-400' : 'bg-orange-500/10 text-orange-400'}`}>
+                      <tr key={t.id} className="text-sm hover:bg-white/5 transition-colors group">
+                        <td className="py-5 px-4 text-slate-500 font-medium">{new Date(t.date).toLocaleDateString()}</td>
+                        <td className="py-5 px-4 font-bold text-white group-hover:text-gym-accent transition-colors">{t.details}</td>
+                        <td className="py-5 px-4">
+                            <span className={`inline-flex px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${t.category === TransactionCategory.MEMBERSHIP ? 'bg-blue-500/5 text-blue-400 border-blue-500/20' : 'bg-orange-500/5 text-orange-400 border-orange-500/20'}`}>
                               {t.category}
                             </span>
                         </td>
-                        <td className="py-3 px-2 text-right font-bold text-white font-mono">₹{t.amount}</td>
+                        <td className="py-5 px-4 text-right font-black text-white text-base">₹{t.amount.toLocaleString()}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -523,38 +613,47 @@ const ManagerDashboard: React.FC = () => {
 
       {/* Add Member Modal */}
       <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="New Member Registration">
-        <form onSubmit={handleAddMember} className="space-y-4">
-           <div className="flex justify-center mb-4">
-              <label className="cursor-pointer">
-                <div className="w-20 h-20 bg-slate-700 rounded-full flex items-center justify-center overflow-hidden border-2 border-gym-accent shadow-inner">
-                    {formData.profilePhoto ? <img src={formData.profilePhoto} className="w-full h-full object-cover" /> : <i className="fas fa-camera text-2xl text-slate-400"></i>}
+        <form onSubmit={handleAddMember} className="space-y-6">
+           <div className="flex justify-center mb-2">
+              <label className="cursor-pointer group relative">
+                <div className="w-24 h-24 bg-slate-900 rounded-3xl flex items-center justify-center overflow-hidden border-2 border-slate-800 group-hover:border-gym-accent transition-all shadow-xl">
+                    {formData.profilePhoto ? <img src={formData.profilePhoto} className="w-full h-full object-cover" /> : <i className="fas fa-camera text-3xl text-slate-700"></i>}
+                </div>
+                <div className="absolute -bottom-2 -right-2 w-8 h-8 bg-gym-accent rounded-full flex items-center justify-center text-white text-xs border-4 border-gym-card">
+                   <i className="fas fa-pencil-alt"></i>
                 </div>
                 <input type="file" className="hidden" accept="image/*" onChange={(e) => handlePhotoUpload(e, 'profile')} disabled={processing} />
               </label>
            </div>
-           <div className="grid grid-cols-2 gap-4">
-              <Input label="Member ID (Mobile)" required value={formData.id} onChange={e => setFormData({...formData, id: e.target.value})} disabled={processing} />
-              <Input label="Full Name" required value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} disabled={processing} />
+           
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Input label="Mobile / Unique ID" icon="fa-mobile-screen" required value={formData.id} onChange={e => setFormData({...formData, id: e.target.value})} disabled={processing} />
+              <Input label="Full Name" icon="fa-user-tag" required value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} disabled={processing} />
            </div>
-           <div className="grid grid-cols-3 gap-2">
+           
+           <div className="grid grid-cols-3 gap-3">
               <Input label="Age" type="number" value={formData.age} onChange={e => setFormData({...formData, age: e.target.value})} disabled={processing} />
               <Input label="Weight (kg)" type="number" value={formData.weight} onChange={e => setFormData({...formData, weight: e.target.value})} disabled={processing} />
               <Input label="Height (cm)" type="number" value={formData.height} onChange={e => setFormData({...formData, height: e.target.value})} disabled={processing} />
            </div>
-           <Input label="Address" value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} disabled={processing} />
+
+           <Input label="Home Address" icon="fa-map-location-dot" value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} disabled={processing} />
+           
            <div className="grid grid-cols-2 gap-4">
-              <Input label="Password" type="text" placeholder="Default: 1234" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} disabled={processing} />
+              <Input label="Password" icon="fa-shield-halved" type="text" placeholder="Default: 1234" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} disabled={processing} />
               <Input label="Join Date" type="date" value={formData.joinDate} onChange={e => setFormData({...formData, joinDate: e.target.value})} disabled={processing} />
            </div>
-           <div className="p-4 bg-slate-800 rounded-lg space-y-4 border border-slate-700">
+
+           <div className="p-6 bg-slate-900/50 rounded-3xl border border-slate-800 space-y-5 shadow-inner">
+              <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Subscription Setup</h4>
               <Select 
-                label="Plan Selection"
+                label="Selected Membership Plan"
                 options={[
-                    { label: `1 Month (₹${gym?.pricing.oneMonth})`, value: 30 },
-                    { label: `2 Months (₹${gym?.pricing.twoMonths})`, value: 60 },
-                    { label: `3 Months (₹${gym?.pricing.threeMonths})`, value: 90 },
-                    { label: `6 Months (₹${gym?.pricing.sixMonths})`, value: 180 },
-                    { label: `1 Year (₹${gym?.pricing.twelveMonths})`, value: 365 },
+                    { label: `1 Month • ₹${gym?.pricing.oneMonth}`, value: 30 },
+                    { label: `2 Months • ₹${gym?.pricing.twoMonths}`, value: 60 },
+                    { label: `3 Months • ₹${gym?.pricing.threeMonths}`, value: 90 },
+                    { label: `6 Months • ₹${gym?.pricing.sixMonths}`, value: 180 },
+                    { label: `1 Year • ₹${gym?.pricing.twelveMonths}`, value: 365 },
                 ]}
                 value={formData.planDurationDays}
                 onChange={e => {
@@ -569,174 +668,188 @@ const ManagerDashboard: React.FC = () => {
                 }}
                 disabled={processing}
               />
-              <Input label="Amount Paid (INR)" type="number" value={formData.amountPaid} onChange={e => setFormData({...formData, amountPaid: e.target.value})} disabled={processing} />
+              <Input label="Payment Collected (₹)" icon="fa-indian-rupee-sign" type="number" value={formData.amountPaid} onChange={e => setFormData({...formData, amountPaid: e.target.value})} disabled={processing} />
            </div>
-           <Button type="submit" className="w-full" isLoading={processing}>Register Member</Button>
+
+           <Button type="submit" className="w-full py-4 rounded-2xl shadow-xl shadow-gym-accent/20" isLoading={processing}>
+              Complete Enrollment
+           </Button>
         </form>
       </Modal>
 
       {/* Member Management Modal */}
-      <Modal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} title="Manage Member Account">
+      <Modal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} title="Advanced Member Management">
         {selectedMember && (
-          <div className="space-y-8 pb-10">
+          <div className="space-y-10 pb-12">
             {/* Section 1: Profile & Extensions */}
-            <section className="space-y-4 p-4 bg-slate-800/50 rounded-xl border border-slate-700">
-               <div className="flex justify-between items-center border-b border-slate-700 pb-2">
-                   <h3 className="text-lg font-bold text-white">1. Profile & Plan Extension</h3>
+            <div className="space-y-6">
+               <div className="flex justify-between items-center bg-slate-900/40 p-3 rounded-2xl border border-slate-800">
+                   <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 pl-2">1. Profile Intelligence</h3>
                    <Button 
-                    variant="outline" 
+                    variant="success" 
                     size="sm" 
                     onClick={() => handleWhatsAppClick(selectedMember)}
-                    className="flex items-center gap-2 text-green-400 border-green-500/30 hover:bg-green-500/10"
+                    className="gap-2 rounded-xl"
                    >
                      {isSendingWhatsApp === selectedMember.id ? <i className="fas fa-spinner fa-spin"></i> : <i className="fab fa-whatsapp"></i>}
-                     Send WhatsApp
+                     Send Reminder
                    </Button>
                </div>
                
-               <div className="flex justify-center mb-6">
+               <div className="flex justify-center">
                  <div className="relative group">
-                    <div className="w-24 h-24 bg-slate-700 rounded-full flex items-center justify-center overflow-hidden border-2 border-gym-accent shadow-lg">
-                        {formData.profilePhoto ? <img src={formData.profilePhoto} className="w-full h-full object-cover" /> : <i className="fas fa-user text-4xl text-slate-500"></i>}
+                    <div className="w-28 h-28 bg-slate-900 rounded-[2rem] flex items-center justify-center overflow-hidden border-4 border-slate-800 shadow-2xl group-hover:border-gym-accent transition-all duration-500">
+                        {formData.profilePhoto ? <img src={formData.profilePhoto} className="w-full h-full object-cover" /> : <i className="fas fa-user-circle text-5xl text-slate-800"></i>}
                     </div>
-                    <label className="absolute bottom-0 right-0 w-8 h-8 bg-gym-accent rounded-full flex items-center justify-center cursor-pointer hover:bg-gym-accentHover transition-colors border-2 border-slate-800">
-                       <i className="fas fa-camera text-xs text-white"></i>
+                    <label className="absolute -bottom-2 -right-2 w-10 h-10 bg-gym-accent text-white rounded-full flex items-center justify-center cursor-pointer hover:scale-110 transition-transform shadow-lg border-4 border-gym-card">
+                       <i className="fas fa-camera text-xs"></i>
                        <input type="file" className="hidden" accept="image/*" onChange={(e) => handlePhotoUpload(e, 'profile')} disabled={processing} />
                     </label>
-                    {formData.profilePhoto && (
-                      <button 
-                        onClick={() => setFormData(prev => ({ ...prev, profilePhoto: '' }))}
-                        className="absolute -top-1 -right-1 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center cursor-pointer hover:bg-red-600 border-2 border-slate-800"
-                      >
-                         <i className="fas fa-times text-[10px] text-white"></i>
-                      </button>
-                    )}
                  </div>
                </div>
 
-               <form onSubmit={updateMemberProfile} className="space-y-4">
+               <form onSubmit={updateMemberProfile} className="space-y-5">
                   <div className="grid grid-cols-2 gap-4">
-                     <Input label="Name" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} disabled={processing} />
-                     <Input label="Password" type="text" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} disabled={processing} />
+                     <Input label="Display Name" icon="fa-signature" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} disabled={processing} />
+                     <Input label="Auth Secret" icon="fa-key" type="text" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} disabled={processing} />
                   </div>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-3 gap-3">
                      <Input label="Age" type="number" value={formData.age} onChange={e => setFormData({...formData, age: e.target.value})} disabled={processing} />
-                     <Input label="Weight (kg)" type="number" value={formData.weight} onChange={e => setFormData({...formData, weight: e.target.value})} disabled={processing} />
-                     <Input label="Height (cm)" type="number" value={formData.height} onChange={e => setFormData({...formData, height: e.target.value})} disabled={processing} />
+                     <Input label="Weight" type="number" value={formData.weight} onChange={e => setFormData({...formData, weight: e.target.value})} disabled={processing} />
+                     <Input label="Height" type="number" value={formData.height} onChange={e => setFormData({...formData, height: e.target.value})} disabled={processing} />
                   </div>
-                  <Input label="Address" value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} disabled={processing} />
-                  <Button type="submit" size="sm" className="w-full" isLoading={processing}>Update Member Profile</Button>
+                  <Input label="Physical Address" icon="fa-location-dot" value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} disabled={processing} />
+                  <Button type="submit" size="md" className="w-full rounded-2xl" variant="outline" isLoading={processing}>Sync Profile Changes</Button>
                </form>
-               <div className="mt-4 pt-4 border-t border-slate-700">
-                  <p className="text-sm font-medium text-slate-300 mb-2 font-bold">Renew / Extend Membership</p>
-                  <div className="flex flex-wrap gap-2 mb-4">
-                     <Button size="sm" variant="secondary" onClick={() => extendPlan(30)} disabled={processing}>+30 Days</Button>
-                     <Button size="sm" variant="secondary" onClick={() => extendPlan(60)} disabled={processing}>+60 Days</Button>
-                     <Button size="sm" variant="secondary" onClick={() => extendPlan(90)} disabled={processing}>+90 Days</Button>
-                     <Button size="sm" variant="secondary" onClick={() => extendPlan(180)} disabled={processing}>+6 Months</Button>
-                     <Button size="sm" variant="secondary" onClick={() => extendPlan(365)} disabled={processing}>+1 Year</Button>
+
+               <div className="pt-8 border-t border-slate-800">
+                  <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 mb-4">Extend Subscription Engine</h4>
+                  <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 mb-6">
+                     <Button size="sm" variant="secondary" className="rounded-xl py-2" onClick={() => extendPlan(30)} disabled={processing}>30D</Button>
+                     <Button size="sm" variant="secondary" className="rounded-xl py-2" onClick={() => extendPlan(60)} disabled={processing}>60D</Button>
+                     <Button size="sm" variant="secondary" className="rounded-xl py-2" onClick={() => extendPlan(90)} disabled={processing}>90D</Button>
+                     <Button size="sm" variant="secondary" className="rounded-xl py-2" onClick={() => extendPlan(180)} disabled={processing}>6M</Button>
+                     <Button size="sm" variant="secondary" className="rounded-xl py-2" onClick={() => extendPlan(365)} disabled={processing}>1Y</Button>
                   </div>
-                  <div className="flex flex-wrap md:flex-nowrap gap-2 items-end">
-                    <div className="flex-1">
-                      <Input 
-                        label="Custom Days" 
-                        type="number" 
-                        placeholder="Days" 
-                        value={manualExtendDays} 
-                        onChange={e => setManualExtendDays(e.target.value)}
-                        disabled={processing}
-                      />
+                  <div className="flex flex-col sm:flex-row gap-3 items-end">
+                    <div className="flex-1 w-full">
+                      <Input label="Custom Days" type="number" placeholder="Days" value={manualExtendDays} onChange={e => setManualExtendDays(e.target.value)} disabled={processing} />
                     </div>
-                    <div className="flex-1">
-                      <Input 
-                        label="Extend Fee (₹)" 
-                        type="number" 
-                        placeholder="Amount" 
-                        value={manualExtendAmount} 
-                        onChange={e => setManualExtendAmount(e.target.value)}
-                        disabled={processing}
-                      />
+                    <div className="flex-1 w-full">
+                      <Input label="Fee (₹)" icon="fa-indian-rupee-sign" type="number" placeholder="Value" value={manualExtendAmount} onChange={e => setManualExtendAmount(e.target.value)} disabled={processing} />
                     </div>
                     <Button 
-                      size="sm" 
-                      className="whitespace-nowrap h-[42px]"
+                      className="w-full sm:w-auto px-10 py-3 rounded-xl"
                       isLoading={processing}
                       onClick={() => {
                         const d = Number(manualExtendDays);
                         const a = manualExtendAmount ? Number(manualExtendAmount) : undefined;
                         if (d > 0) extendPlan(d, a);
-                        else alert('Please enter valid days');
+                        else alert('Enter valid duration');
                       }}
                     >
                       Update
                     </Button>
                   </div>
                </div>
-            </section>
+            </div>
 
             {/* Section 2: Transformation Photos */}
-            <section className="space-y-4 p-4 bg-slate-800/50 rounded-xl border border-slate-700">
-               <h3 className="text-lg font-bold text-white border-b border-slate-700 pb-2">2. Transformation Journey</h3>
-               <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                     <p className="text-xs text-slate-500 uppercase font-bold">Before Photo</p>
-                     <label className="block w-full h-48 bg-slate-900 border-2 border-dashed border-slate-700 rounded-lg overflow-hidden cursor-pointer relative hover:border-gym-accent transition-all">
+            <div className="space-y-6 pt-10 border-t border-slate-800">
+               <div className="bg-slate-900/40 p-3 rounded-2xl border border-slate-800">
+                   <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 pl-2">2. Visual Transformation</h3>
+               </div>
+               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                  <div className="space-y-3">
+                     <p className="text-[10px] text-slate-500 uppercase font-black tracking-widest text-center">Inception Photo</p>
+                     <label className="block w-full h-64 bg-slate-900/50 border-2 border-dashed border-slate-800 rounded-[2rem] overflow-hidden cursor-pointer relative hover:border-gym-accent/50 transition-all shadow-inner">
                         {selectedMember.transformationPhotos.before ? (
                             <img src={selectedMember.transformationPhotos.before} className="w-full h-full object-cover" />
                         ) : (
-                            <div className="flex flex-col items-center justify-center h-full text-slate-600 gap-2">
-                               <i className="fas fa-upload text-2xl"></i>
-                               <span className="text-[10px]">Select Photo</span>
+                            <div className="flex flex-col items-center justify-center h-full text-slate-700 gap-3">
+                               <i className="fas fa-image text-3xl"></i>
+                               <span className="text-[9px] font-black uppercase tracking-widest">Upload Phase 1</span>
                             </div>
                         )}
                         <input type="file" className="hidden" accept="image/*" onChange={e => handlePhotoUpload(e, 'before')} disabled={processing} />
                      </label>
                   </div>
-                  <div className="space-y-2">
-                     <p className="text-xs text-slate-500 uppercase font-bold">After Photo</p>
-                     <label className="block w-full h-48 bg-slate-900 border-2 border-dashed border-slate-700 rounded-lg overflow-hidden cursor-pointer relative hover:border-gym-accent transition-all">
+                  <div className="space-y-3">
+                     <p className="text-[10px] text-slate-500 uppercase font-black tracking-widest text-center">Current Progress</p>
+                     <label className="block w-full h-64 bg-slate-900/50 border-2 border-dashed border-slate-800 rounded-[2rem] overflow-hidden cursor-pointer relative hover:border-gym-accent/50 transition-all shadow-inner">
                         {selectedMember.transformationPhotos.after ? (
                             <img src={selectedMember.transformationPhotos.after} className="w-full h-full object-cover" />
                         ) : (
-                            <div className="flex flex-col items-center justify-center h-full text-slate-600 gap-2">
-                               <i className="fas fa-upload text-2xl"></i>
-                               <span className="text-[10px]">Select Photo</span>
+                            <div className="flex flex-col items-center justify-center h-full text-slate-700 gap-3">
+                               <i className="fas fa-image text-3xl"></i>
+                               <span className="text-[9px] font-black uppercase tracking-widest">Upload Current</span>
                             </div>
                         )}
                         <input type="file" className="hidden" accept="image/*" onChange={e => handlePhotoUpload(e, 'after')} disabled={processing} />
                      </label>
                   </div>
                </div>
-            </section>
+            </div>
 
             {/* Section 3: Supplement Billing */}
-            <section className="space-y-4 p-4 bg-slate-800/50 rounded-xl border border-slate-700">
-               <h3 className="text-lg font-bold text-white border-b border-slate-700 pb-2">3. Supplement Billing</h3>
-               <form onSubmit={addSupplementBill} className="grid grid-cols-2 md:grid-cols-4 gap-2 items-end">
-                  <div className="col-span-1 md:col-span-1"><Input label="Item Name" required value={suppForm.itemName} onChange={e => setSuppForm({...suppForm, itemName: e.target.value})} disabled={processing} /></div>
+            <div className="space-y-6 pt-10 border-t border-slate-800">
+               <div className="bg-slate-900/40 p-3 rounded-2xl border border-slate-800">
+                   <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 pl-2">3. Supplement Registry</h3>
+               </div>
+               <form onSubmit={addSupplementBill} className="grid grid-cols-2 md:grid-cols-4 gap-3 items-end">
+                  <div className="col-span-1 md:col-span-1"><Input label="Product" icon="fa-tag" required value={suppForm.itemName} onChange={e => setSuppForm({...suppForm, itemName: e.target.value})} disabled={processing} /></div>
                   <div className="col-span-1 md:col-span-1"><Input label="Qty" type="number" value={suppForm.qty} onChange={e => setSuppForm({...suppForm, qty: Number(e.target.value)})} disabled={processing} /></div>
-                  <div className="col-span-1 md:col-span-1"><Input label="Amount (₹)" type="number" required value={suppForm.amount} onChange={e => setSuppForm({...suppForm, amount: Number(e.target.value)})} disabled={processing} /></div>
-                  <div className="col-span-1 md:col-span-1"><Button type="submit" size="sm" className="w-full" isLoading={processing}>Add Bill</Button></div>
+                  <div className="col-span-1 md:col-span-1"><Input label="Fee (₹)" type="number" required value={suppForm.amount} onChange={e => setSuppForm({...suppForm, amount: Number(e.target.value)})} disabled={processing} /></div>
+                  <div className="col-span-1 md:col-span-1"><Button type="submit" size="md" className="w-full rounded-xl py-3" isLoading={processing}>Record</Button></div>
                </form>
                <div className="mt-4">
-                  <p className="text-xs font-bold text-slate-500 mb-2 uppercase tracking-widest">Recent Supplement Sales</p>
+                  <p className="text-[9px] font-black text-slate-600 mb-4 uppercase tracking-[0.2em] flex items-center gap-2">
+                     <i className="fas fa-history"></i> Sales Log
+                  </p>
                   {selectedMember.supplementBills.length > 0 ? (
-                    <div className="max-h-40 overflow-y-auto space-y-2 pr-2">
+                    <div className="max-h-56 overflow-y-auto space-y-3 pr-2 custom-scrollbar">
                        {selectedMember.supplementBills.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map(b => (
-                          <div key={b.id} className="text-xs flex justify-between items-center p-3 bg-slate-900/80 rounded border border-slate-800">
-                             <div>
-                                <span className="text-white font-bold block">{b.itemName} (x{b.qty})</span>
-                                <span className="text-slate-500 block mt-0.5">{new Date(b.date).toLocaleDateString()}</span>
+                          <div key={b.id} className="text-xs flex justify-between items-center p-4 glass rounded-2xl border-slate-800 group hover:border-gym-accent/30 transition-all">
+                             <div className="flex gap-4 items-center">
+                                <div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center text-orange-500">
+                                   <i className="fas fa-cart-shopping"></i>
+                                </div>
+                                <div>
+                                   <span className="text-white font-extrabold block text-sm">{b.itemName} <span className="text-slate-500 text-[10px] ml-1">x{b.qty}</span></span>
+                                   <span className="text-slate-500 font-bold block mt-0.5 text-[9px] uppercase tracking-tighter">{new Date(b.date).toLocaleDateString()} • Recorded via Cloud</span>
+                                </div>
                              </div>
-                             <span className="text-orange-400 font-bold font-mono text-sm">₹{b.amount}</span>
+                             <span className="text-white font-black text-lg">₹{b.amount.toLocaleString()}</span>
                           </div>
                        ))}
                     </div>
                   ) : (
-                    <div className="text-center py-4 text-slate-600 text-[10px]">No supplements recorded.</div>
+                    <div className="text-center py-10 glass rounded-3xl border-dashed border-slate-800 flex flex-col gap-2">
+                       <i className="fas fa-box-open text-slate-800 text-2xl"></i>
+                       <span className="text-slate-600 font-bold text-[10px] uppercase tracking-widest">No commercial records</span>
+                    </div>
                   )}
                </div>
-            </section>
+            </div>
+
+            {/* Danger Zone: Delete Member */}
+            <div className="pt-10 border-t border-red-500/20">
+               <div className="bg-red-500/5 p-6 rounded-[2rem] border border-red-500/20">
+                  <h3 className="text-red-400 font-black uppercase tracking-widest text-xs mb-2">Danger Territory</h3>
+                  <p className="text-red-400/60 text-[11px] mb-4 leading-relaxed">Deleting this account will permanently erase all profile data, payment history, and transformation records from the secure cloud infrastructure. This action is irreversible.</p>
+                  <Button 
+                    variant="danger" 
+                    className="w-full py-4 rounded-2xl" 
+                    onClick={() => {
+                        handleDeleteMember(selectedMember.id, selectedMember.name);
+                        setIsEditModalOpen(false);
+                    }}
+                    isLoading={processing}
+                  >
+                    <i className="fas fa-trash-alt mr-2"></i> Delete Account Permanently
+                  </Button>
+               </div>
+            </div>
           </div>
         )}
       </Modal>
